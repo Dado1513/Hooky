@@ -59,7 +59,9 @@ adb shell "/data/local/tmp/frida-server &"
 
 ```
 
-### Basic Usage
+## 🔧 Usage
+
+### hooky_easy.py
 
 ```bash
 # Quick Utilities - Fast testing
