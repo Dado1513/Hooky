@@ -63,7 +63,27 @@ adb shell "/data/local/tmp/frida-server &"
 
 ```bash
 # Quick Utilities - Fast testing
-uv run python hooky_easy.py com.example.app com.example.AuthManager
-uv run python hooky_easy.py com.example.app 'login.*' 'auth.'
-uv run python hooky_easy.py --cli
+uv run hooky_easy.py com.example.app com.example.AuthManager
+uv run hooky_easy.py com.example.app 'login.*' 'auth.'
+uv run hooky_easy.py --cli
 ```
+
+## 📚 Resources
+
+- **Frida Documentation**: https://frida.re/docs/
+- **Android Reverse Engineering**: https://github.com/android/security-samples
+- **iOS Security**: https://github.com/OWASP/owasp-mastg
+- **Method Signature Reference**: https://docs.oracle.com/javase/tutorial/reflect/
+- **Regex Testing**: https://regex101.com/ (for testing method filter patterns)
+
+
+## 🤝 Contributing
+
+Feel free to extend these scripts with additional features:
+- Custom data type support
+- GUI interface
+- Database logging
+- Network interception
+- Advanced pattern matching
+- Method signature analysis
+- Cross-platform support (iOS)     

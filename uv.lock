@@ -32,7 +32,20 @@ wheels = [
 ]
 
 [[package]]
-name = "frida-method-interceptor"
+name = "frida-tools"
+version = "13.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama" },
+    { name = "frida" },
+    { name = "prompt-toolkit" },
+    { name = "pygments" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/23/ed/b4fd7a46432ab1f563e4991e658fc44fb01aade027be6fb5b219c09d5d3c/frida-tools-13.0.0.tar.gz", hash = "sha256:76e3c6fe5bd3c9ff37da6cbab3ba7426b0094afd372b9c2d9f2a59da370c7c9a", size = 1381784 }
+
+[[package]]
+name = "hooky"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
@@ -57,19 +70,6 @@ requires-dist = [
     { name = "wcwidth", specifier = "==0.2.13" },
     { name = "websockets", specifier = "==13.1" },
 ]
-
-[[package]]
-name = "frida-tools"
-version = "13.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama" },
-    { name = "frida" },
-    { name = "prompt-toolkit" },
-    { name = "pygments" },
-    { name = "websockets" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/23/ed/b4fd7a46432ab1f563e4991e658fc44fb01aade027be6fb5b219c09d5d3c/frida-tools-13.0.0.tar.gz", hash = "sha256:76e3c6fe5bd3c9ff37da6cbab3ba7426b0094afd372b9c2d9f2a59da370c7c9a", size = 1381784 }
 
 [[package]]
 name = "prompt-toolkit"
