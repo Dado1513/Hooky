@@ -36,6 +36,17 @@ class QuickFridaHook:
             raise ValueError("class_name cannot be empty")
             
         js_code = f"""
+        const colors = {{
+            reset: '\x1b[0m',
+            red: '\x1b[31m',
+            green: '\x1b[32m',
+            yellow: '\x1b[33m',
+            blue: '\x1b[34m',
+            magenta: '\x1b[35m',
+            cyan: '\x1b[36m',
+            white: '\x1b[37m',
+            gray: '\x1b[90m'
+        }};
         // Sleep function for synchronous delays
         function sleep(ms) {{
             var start = new Date().getTime();
@@ -43,7 +54,7 @@ class QuickFridaHook:
                 // Busy wait
             }}
         }}
-        
+
         // Method pattern matching function
         function matchesMethodPattern(methodName, patterns) {{
             for (let i = 0; i < patterns.length; i++) {{
@@ -53,12 +64,12 @@ class QuickFridaHook:
                         return true;
                     }}
                 }} catch (e) {{
-                    console.log('[-] Invalid regex pattern: ' + patterns[i]);
+                    console.log(colors.red + '[-] Invalid regex pattern: ' + patterns[i] + colors.reset);
                 }}
             }}
             return false;
         }}
-        
+
         // Validate class name on JavaScript side
         function validateClassName(className) {{
             if (!className || typeof className !== 'string') {{
@@ -72,29 +83,29 @@ class QuickFridaHook:
             }}
             return className.trim();
         }}
-        
+
         // Retry mechanism for class loading
         function tryFindClass(className, maxRetries, delay) {{
             className = validateClassName(className);
-            console.log('[DEBUG] Attempting to find class: "' + className + '"');
+            console.log(colors.gray + '[DEBUG] Attempting to find class: "' + className + '"' + colors.reset);
             
             var retries = 0;
             
             function attempt() {{
                 try {{
                     var clazz = Java.use(className);
-                    console.log("[+] Class found: " + className);
+                    console.log(colors.green + "[+] Class found: " + className + colors.reset);
                     return clazz;
                 }} catch (e) {{
                     retries++;
-                    console.log("[-] Attempt " + retries + " failed: " + e.message);
+                    console.log(colors.red + "[-] Attempt " + retries + " failed: " + e.message + colors.reset);
                     
                     if (retries < maxRetries) {{
-                        console.log("[-] Retrying in " + delay + "ms...");
+                        console.log(colors.yellow + "[-] Retrying in " + delay + "ms..." + colors.reset);
                         sleep(delay);
                         return attempt();
                     }} else {{
-                        console.log("[-] Failed to find class after " + maxRetries + " attempts");
+                        console.log(colors.red + "[-] Failed to find class after " + maxRetries + " attempts" + colors.reset);
                         throw e;
                     }}
                 }}
@@ -102,16 +113,16 @@ class QuickFridaHook:
             
             return attempt();
         }}
-        
+
         Java.perform(function() {{
             // Wait for app initialization
             setTimeout(function() {{
-                console.log("[*] Starting class hooking after delay...");
-                console.log("[DEBUG] Target class name: '{class_name}'");
+                console.log(colors.cyan + "[*] Starting class hooking after delay..." + colors.reset);
+                console.log(colors.gray + "[DEBUG] Target class name: '{class_name}'" + colors.reset);
                 
                 // Method patterns from Python
                 const methodPatterns = {js_patterns};
-                console.log("[DEBUG] Method patterns: " + JSON.stringify(methodPatterns));
+                console.log(colors.gray + "[DEBUG] Method patterns: " + JSON.stringify(methodPatterns) + colors.reset);
                 
                 try {{
                     // Validate and find the class with retries
@@ -121,7 +132,7 @@ class QuickFridaHook:
                     sleep(500);
                     
                     const methods = targetClass.class.getDeclaredMethods();
-                    console.log('[+] Found ' + methods.length + ' methods in {class_name}');   
+                    console.log(colors.cyan + '[+] Found ' + methods.length + ' methods in {class_name}' + colors.reset);   
                     
                     const originalMethods = {{}};  // Store original implementations
                     let hookedCount = 0;
@@ -132,7 +143,7 @@ class QuickFridaHook:
                         
                         // Check if method matches any of the patterns
                         if (!matchesMethodPattern(methodName, methodPatterns)) {{
-                            console.log('[SKIP] Method does not match patterns: ' + methodName);
+                            console.log(colors.gray + '[SKIP] Method does not match patterns: ' + methodName + colors.reset);
                             return;
                         }}
                         
@@ -152,17 +163,17 @@ class QuickFridaHook:
                             originalMethods[methodKey] = targetClass[methodName].overload.apply(targetClass[methodName], paramNames);
                             
                             targetClass[methodName].overload.apply(targetClass[methodName], paramNames).implementation = function() {{
-                                console.log('\\n=== METHOD CALL ===');
-                                console.log('Class: {class_name}');
-                                console.log('Method: ' + methodName);
-                                console.log('Arguments:');
+                                console.log(colors.magenta + '\\n=== METHOD CALL ===' + colors.reset);
+                                console.log(colors.blue + 'Class: {class_name}' + colors.reset);
+                                console.log(colors.yellow + 'Method: ' + methodName + colors.reset);
+                                console.log(colors.cyan + 'Arguments:' + colors.reset);
                                 
                                 const args = Array.prototype.slice.call(arguments);
                                 for (let i = 0; i < args.length; i++) {{
                                     try {{
-                                        console.log('  [' + i + '] ' + paramNames[i] + ': ' + args[i]);
+                                        console.log(colors.white + '  [' + i + '] ' + paramNames[i] + ': ' + args[i] + colors.reset);
                                     }} catch (e) {{
-                                        console.log('  [' + i + '] ' + paramNames[i] + ': [Error displaying value]');
+                                        console.log(colors.red + '  [' + i + '] ' + paramNames[i] + ': [Error displaying value]' + colors.reset);
                                     }}
                                 }}
                                 
@@ -170,42 +181,42 @@ class QuickFridaHook:
                                 let result;
                                 try {{
                                     result = originalMethods[methodKey].apply(this, arguments);
-                                    console.log('Return Type ['+methodName+']: ' + (result === null ? 'null' : typeof result));
-                                    console.log('Return Value ['+methodName+']: ' + result);
+                                    console.log(colors.gray + 'Return Type ['+methodName+']: ' + (result === null ? 'null' : typeof result) + colors.reset);
+                                    console.log(colors.green + 'Return Value ['+methodName+']: ' + result + colors.reset);
                                 }} catch (e) {{
-                                    console.log('Error calling original method: ' + e);
+                                    console.log(colors.red + 'Error calling original method: ' + e + colors.reset);
                                     throw e;
                                 }}
                                 
-                                console.log('===================\\n');
+                                console.log(colors.magenta + '===================\\n' + colors.reset);
                                 return result;
                             }};
                             
                             hookedCount++;
-                            console.log('[+] Hooked: ' + methodName + ' (params: ' + paramNames.length + ')');
+                            console.log(colors.green + '[+] Hooked: ' + methodName + ' (params: ' + paramNames.length + ')' + colors.reset);
                         }} catch (e) {{
-                            console.log('[-] Failed to hook: ' + methodName + ' - ' + e);
+                            console.log(colors.red + '[-] Failed to hook: ' + methodName + ' - ' + e + colors.reset);
                         }}
                     }});
                     
-                    console.log("[+] Hooking completed successfully!");
-                    console.log("[+] Successfully hooked " + hookedCount + " methods");
+                    console.log(colors.green + "[+] Hooking completed successfully!" + colors.reset);
+                    console.log(colors.green + "[+] Successfully hooked " + hookedCount + " methods" + colors.reset);
                     
                 }} catch (e) {{
-                    console.log("[-] Failed to initialize hooks: " + e);
-                    console.log("[-] Error details: " + e.message);
-                    console.log("[-] Stack trace: " + e.stack);
+                    console.log(colors.red + "[-] Failed to initialize hooks: " + e + colors.reset);
+                    console.log(colors.red + "[-] Error details: " + e.message + colors.reset);
+                    console.log(colors.red + "[-] Stack trace: " + e.stack + colors.reset);
                     
                     // List available classes for debugging
-                    console.log("[*] Listing loaded classes containing similar names...");
+                    console.log(colors.cyan + "[*] Listing loaded classes containing similar names..." + colors.reset);
                     Java.enumerateLoadedClasses({{
                         onMatch: function(className) {{
                             if (className.toLowerCase().includes('{class_name}'.toLowerCase().split('.').pop())) {{
-                                console.log("[DEBUG] Similar class found: " + className);
+                                console.log(colors.yellow + "[DEBUG] Similar class found: " + className + colors.reset);
                             }}
                         }},
                         onComplete: function() {{
-                            console.log("[DEBUG] Class enumeration complete");
+                            console.log(colors.gray + "[DEBUG] Class enumeration complete" + colors.reset);
                         }}
                     }});
                 }}
@@ -353,6 +364,18 @@ def quick_start(package_name, class_name, method_patterns=None):
     js_patterns = json.dumps(method_patterns)
     
     js_code = f"""
+        const colors = {{
+        reset: '\x1b[0m',
+        red: '\x1b[31m',
+        green: '\x1b[32m',
+        yellow: '\x1b[33m',
+        blue: '\x1b[34m',
+        magenta: '\x1b[35m',
+        cyan: '\x1b[36m',
+        white: '\x1b[37m',
+        gray: '\x1b[90m'
+    }};
+
     Java.perform(function() {{
         function matchesPattern(methodName, patterns) {{
             for (let i = 0; i < patterns.length; i++) {{
@@ -360,7 +383,7 @@ def quick_start(package_name, class_name, method_patterns=None):
                     const regex = new RegExp(patterns[i], 'i');
                     if (regex.test(methodName)) return true;
                 }} catch (e) {{
-                    console.log('Invalid regex: ' + patterns[i]);
+                    console.log(colors.red + '[-] Invalid regex: ' + patterns[i] + colors.reset);
                 }}
             }}
             return false;
@@ -369,10 +392,10 @@ def quick_start(package_name, class_name, method_patterns=None):
         setTimeout(function() {{
             try {{
                 const targetClass = Java.use('{class_name}');
-                console.log('[+] Found target class: {class_name}');
+                console.log(colors.green + '[+] Found target class: {class_name}' + colors.reset);
                 
                 const methods = targetClass.class.getDeclaredMethods();
-                console.log('[+] Found ' + methods.length + ' methods');
+                console.log(colors.cyan + '[+] Found ' + methods.length + ' methods' + colors.reset);
                 
                 const patterns = {js_patterns};
                 let hookedCount = 0;
@@ -386,8 +409,8 @@ def quick_start(package_name, class_name, method_patterns=None):
                     }}
                     
                     try {{
-                        console.log('[+] Hooking: ' + methodName);
-                        
+                        console.log(colors.yellow + '[+] Hooking: ' + methodName + colors.reset);
+
                         // Get parameter types for overloading
                         const paramTypes = method.getParameterTypes();
                         const paramNames = [];
@@ -399,37 +422,36 @@ def quick_start(package_name, class_name, method_patterns=None):
                         const originalMethod = targetClass[methodName].overload.apply(targetClass[methodName], paramNames);
                         
                         targetClass[methodName].overload.apply(targetClass[methodName], paramNames).implementation = function() {{
-                            console.log('\\n>>> Called: ' + methodName);
-                            console.log('>>> Class: {class_name}');
-                            console.log('>>> Arguments (' + arguments.length + '):');
+                            console.log(colors.magenta + '\\n>>> Called: ' + methodName + colors.reset);
+                            console.log(colors.blue + '>>> Class: {class_name}' + colors.reset);
+                            console.log(colors.cyan + '>>> Arguments (' + arguments.length + '):' + colors.reset);
                             
                             for (let i = 0; i < arguments.length; i++) {{
-                                console.log('    [' + i + '] ' + paramNames[i] + ': ' + arguments[i]);
+                                console.log(colors.white + '    [' + i + '] ' + paramNames[i] + ': ' + arguments[i] + colors.reset);
                             }}
                             
                             // Call original
                             const result = originalMethod.apply(this, arguments);
-                            console.log('>>> Return Type ['+methodName+']: ' + (result === null ? 'null' : typeof result));
-                            console.log('>>> Return Value ['+methodName+']: ' + result);
-                            console.log('<<<');
+                            console.log(colors.gray + '>>> Return Type ['+methodName+']: ' + (result === null ? 'null' : typeof result) + colors.reset);
+                            console.log(colors.green + '>>> Return Value ['+methodName+']: ' + result + colors.reset);
+                            console.log(colors.magenta + '<<<' + colors.reset);
                             
                             return result;
                         }};
                         
                         hookedCount++;
                     }} catch (e) {{
-                        console.log('[-] Could not hook: ' + methodName + ' - ' + e);
+                        console.log(colors.red + '[-] Could not hook: ' + methodName + ' - ' + e + colors.reset);
                     }}
                 }});
                 
-                console.log('[+] Successfully hooked ' + hookedCount + ' methods');
+                console.log(colors.green + '[+] Successfully hooked ' + hookedCount + ' methods' + colors.reset);
             }} catch (e) {{
-                console.log('[-] Error: ' + e);
+                console.log(colors.red + '[-] Error: ' + e + colors.reset);
             }}
         }}, 2000);
     }});
     """
-    
     
     script = session.create_script(js_code)
     script.on('message', lambda msg, data: print(f"[JS] {msg}"))
