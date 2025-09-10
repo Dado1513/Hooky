@@ -9,8 +9,8 @@
 
 
 
-## Features
-- 🔍 **Function Hooking** - Intercept and analyze native method calls
+## ⭐ Features
+- 🔍 **Function Hooking** - Intercept and analyze native (Java & Kotlin) method calls
 - 📱 **Multi-Platform** - Android support (iOS coming soon)  
 - 🛡️ **Security Testing** - Bypass protections and uncover hidden behaviors
 - ⚡ **Easy to Use** - Simple CLI interface for rapid analysis
