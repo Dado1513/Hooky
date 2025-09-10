@@ -1,0 +1,11 @@
+frida==16.7.19
+frida-tools==13.0.0
+PyYAML==6.0.2
+colorama==0.4.6
+frida==16.7.19
+frida-tools==13.0.0
+prompt-toolkit==3.0.52
+pygments==2.19.2
+pyyaml==6.0.2
+wcwidth==0.2.13
+websockets==13.1

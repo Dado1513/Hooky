@@ -16,3 +16,54 @@
 - ⚡ **Easy to Use** - Simple CLI interface for rapid analysis
 
 Perfect for security researchers, penetration testers, and mobile app analysts who need to perform deep runtime inspection and vulnerability assessment.
+
+
+## 📋 Complete File Structure
+
+Hooky:
+
+```
+Hooky/
+├── hooky_easy.py        # Quick utilities and CLI ANDROID ONLY 
+... Coming Soon
+└── README.md                    # This usage guide
+```
+
+## 🎯 Quick Start
+
+### Requirements
+- Python 3.12+
+- frida-server 16.7.19 (must be running on target device)
+- uv (Python package manager)
+
+### Installation
+```bash
+uv venv
+# Activate virtual environment
+# On Unix/macOS:
+source .venv/bin/activate
+
+# On Windows:
+.venv\Scripts\activate
+
+# Sync dependencies to active/project virtual environment
+uv sync
+```
+### Setup frida-server
+```bash
+# Download and setup frida-server 16.7.19 on your target device
+# For Android:
+adb push frida-server-16.7.19-android-arm64 /data/local/tmp/frida-server
+adb shell "chmod 755 /data/local/tmp/frida-server"
+adb shell "/data/local/tmp/frida-server &"
+
+```
+
+### Basic Usage
+
+```bash
+# Quick Utilities - Fast testing
+uv run python hooky_easy.py com.example.app com.example.AuthManager
+uv run python hooky_easy.py com.example.app 'login.*' 'auth.'
+uv run python hooky_easy.py --cli
+```
