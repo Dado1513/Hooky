@@ -236,24 +236,24 @@ class FridaCLI:
         print("\n" + "="*50)
         print("FRIDA INTERACTIVE MENU")
         print("="*50)
-        print("1. List running processes")
+        print("1. List running applications")
         print("2. Hook specific class")
         print("3. Custom JavaScript")
         print("4. Show active hooks")
         print("5. Exit")
         print("="*50)
-        
-    def list_processes(self):
-        """List running processes"""
+
+    def list_applications(self):
+        """List running applications"""
         try:
             device = frida.get_usb_device()
-            processes = device.enumerate_processes()
+            applications = device.enumerate_applications()
             print(f"\n{'PID':<8} {'Name':<30} {'Identifier'}")
             print("-" * 60)
-            for p in processes:
-                print(f"{p.pid:<8} {p.name:<30} {getattr(p, 'identifier', 'N/A')}")
+            for app in applications:
+                print(f"{app.pid:<8} {app.name:<30} {getattr(app, 'identifier', 'N/A')}")
         except Exception as e:
-            print(f"Error listing processes: {e}")
+            print(f"Error listing applications: {e}")
     
     def hook_class(self):
         """Interactive class hooking with regex method filtering"""
@@ -329,7 +329,7 @@ class FridaCLI:
             choice = input("Select option (1-5): ").strip()
             
             if choice == '1':
-                self.list_processes()
+                self.list_applications()
             elif choice == '2':
                 self.hook_class()
             elif choice == '3':
