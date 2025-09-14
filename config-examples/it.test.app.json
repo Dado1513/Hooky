@@ -1,0 +1,48 @@
+{
+  "app": {
+    "package_name": "it.test.app",
+    "spawn_mode": true,
+    "enable_spawn_gating": false
+  },
+  "logging": {
+    "enabled": true,
+    "log_file": null,
+    "log_level": "INFO"
+  },
+  "targets": [
+    {
+      "class_name": "it.test.rootdetection.RootDetection",
+      "methods": ["checkRootMethod1","checkRootMethod2","checkRootMethod3","isDeviceRooted"],
+      "enabled": true
+    }
+    
+  ],
+  "global_rules": {
+    "input_modifications": {},
+    "return_overrides": {
+      ".*checkRootMethod1.*": {
+        "return_value": false,
+        "value_type": "boolean"
+      },
+      ".*checkRootMethod2.*": {
+        "return_value": false,
+        "value_type": "boolean"
+      },
+      ".*checkRootMethod3.*": {
+        "return_value": false,
+        "value_type": "boolean"
+      },
+      ".*isDeviceRooted.*": {
+        "return_value": false,
+        "value_type": "boolean"
+      }
+    },
+    "method_blocks": [],
+    "method_logging": [
+      ".*checkRootMethod1.*",
+      ".*checkRootMethod2.*",
+      ".*checkRootMethod3.*",
+      ".*isDeviceRooted.*"
+    ]
+  }
+}

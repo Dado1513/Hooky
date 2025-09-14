@@ -1,0 +1,38 @@
+{
+  "app": {
+    "package_name": "it.test.securestoreapp",
+    "spawn_mode": true,
+    "enable_spawn_gating": false
+  },
+  "logging": {
+    "enabled": true,
+    "log_file": null,
+    "log_level": "INFO"
+  },
+  "targets": [
+    {
+      "class_name": "expo.modules.securestore.SecureStoreModule",
+      "methods": [
+        ".*"
+      ],
+      "enabled": true
+    }
+  ],
+  "global_rules": {
+    "input_modifications": {
+      "getItemImpl": {
+        "param_index": 1,
+        "new_value": "test",
+        "value_type": "string"
+      }
+    },
+    "return_overrides": {
+      "getItemImpl": {
+        "return_value": "444444",
+        "value_type": "string"
+      }
+    },
+    "method_blocks": [],
+    "method_logging": []
+  }
+}
