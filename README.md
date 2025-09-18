@@ -26,11 +26,11 @@ Hooky:
 Hooky/
 ├── hooky_interactive.py         # Interactive method hooking with filtering ANDROID ONLY
 ├── method_discovery.py          # Method discovery and analysis ANDROID ONLY
-├── hooky_easy.py        # Quick utilities and CLI ANDROID ONLY 
-├── hooky_native.py      # Quick utilities for native hooking ANDROID & iOS 
+├── hooky_easy.py                # Quick utilities and CLI ANDROID ONLY 
+├── hooky_native.py              # Quick utilities for native hooking ANDROID & iOS 
 ├── hooky_config.py              # Configuration-based hooking ANDROID ONLY
-├── hooky_automated.py   # Automation and batch processing ANDROID ONLY
-├── hooky_pattern_loader.py # Hook based on Pattern Android and iOS
+├── hooky_automated.py           # Automation and batch processing ANDROID ONLY
+├── hooky_pattern_loader.py      # Hook based on Pattern Android and iOS
 ├── js_to_json_converter.py      # From JS to JSON for frida_config
 └── README.md                    # This usage guide
 
