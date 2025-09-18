@@ -11,6 +11,7 @@ import re
 import argparse
 import time
 from typing import List, Optional
+from banner import show_banner, Colors
 
 class NativeMethodHooker:
     def __init__(self, target, library_path: str, pattern: str, device_id: Optional[str] = None):
@@ -676,6 +677,7 @@ def main():
     hooker.start_hooking()
 
 if __name__ == "__main__":
+    show_banner()
     main()
 
 # Example usage:

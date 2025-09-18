@@ -10,6 +10,7 @@ import re
 from datetime import datetime
 import threading
 import queue
+from banner import show_banner, Colors
 
 class AutomatedFridaHook:
     """Automated hooking with predefined rules"""
@@ -433,6 +434,7 @@ def example_recording_session():
         print(f"  {method}: {count} calls")
 
 if __name__ == "__main__":
+    show_banner()
     print("Advanced Frida Examples")
     print("1. Automated auth bypass")
     print("2. Batch hooking")  

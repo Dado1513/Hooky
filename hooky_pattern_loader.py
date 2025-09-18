@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 import frida
 from frida.core import Session, Device
+from banner import show_banner, Colors
+
 
 class FridaPatternLoader:
     def __init__(self):
@@ -705,6 +707,7 @@ def create_sample_config():
     return sample_config
 
 def main():
+    show_banner()
     parser = argparse.ArgumentParser(
         description='Frida Pattern Loader - Advanced pattern-based hooking for penetration testing',
         formatter_class=argparse.RawDescriptionHelpFormatter,

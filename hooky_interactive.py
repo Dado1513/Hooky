@@ -11,6 +11,7 @@ import threading
 import json
 import time
 from queue import Queue, Empty
+from banner import show_banner, Colors
 
 class EnhancedInteractiveFridaHook:
     def __init__(self, package_name, target_class, method_filters=None, mode="primitives"):
@@ -1002,4 +1003,5 @@ def main():
     hook.start()
 
 if __name__ == "__main__":
+    show_banner()
     main()

@@ -11,6 +11,7 @@ import sys
 import os
 from datetime import datetime
 import time
+from banner import show_banner, Colors
 
 class FridaConfig:
     """Configuration manager for Frida hooks"""
@@ -869,4 +870,5 @@ def social_media_privacy_example():
     print("[+] Social media privacy test configuration saved to privacy_test_config.json")
 
 if __name__ == "__main__":
+    show_banner()
     main()
