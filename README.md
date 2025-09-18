@@ -30,6 +30,7 @@ Hooky/
 ├── hooky_native.py      # Quick utilities for native hooking ANDROID & iOS 
 ├── hooky_config.py              # Configuration-based hooking ANDROID ONLY
 ├── hooky_automated.py   # Automation and batch processing ANDROID ONLY
+├── hooky_pattern_loader.py # Hook based on Pattern Android and iOS
 ├── js_to_json_converter.py      # From JS to JSON for frida_config
 └── README.md                    # This usage guide
 
@@ -122,6 +123,27 @@ uv run python hooky_native.py "com.example.app" "libnative.so" ".*" # Hook Andro
 uv run python hooky_native.py "1234" "libnative.so" "SSL_.*" # Hook by PID (will attach)
 uv run python hooky_native.py "com.example.app" "libnative.so" "Java_.*" -d "14ed2fcc" # Hook with specific USB device
 ```
+
+### hooky_pattern_loader.py
+
+```bash
+  # Load patterns from config file
+uv run python hooky_pattern_loader.py -c patterns.yml -t com.example.app
+
+# Load simple JSON patterns (only pattern, regex, description, enabled)
+uv run python hooky_pattern_loader.py -j simple_patterns.json -t com.example.app
+
+# Add single pattern via command line
+uv run python hooky_pattern_loader.py -t com.example.app -p "setPassword:a1 18 00 f0 21 ec 45 f9"
+
+# Mix JSON patterns with command line patterns
+uv run python hooky_pattern_loader.py -j patterns.json -p "custom:?? ?? ?? ??" -t app
+
+# Generate sample config
+uv run python hooky_pattern_loader.py --sample-config > patterns.yml
+```
+
+Some config examples can be found [here](config-examples\sample-json-pattern-examples.json).
 
 ## 🚀 Usage Scenarios
 
