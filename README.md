@@ -127,20 +127,12 @@ uv run python hooky_native.py "com.example.app" "libnative.so" "Java_.*" -d "14e
 ### hooky_pattern_loader.py
 
 ```bash
-  # Load patterns from config file
-uv run python hooky_pattern_loader.py -c patterns.yml -t com.example.app
+uv run python hooky_pattern_loader.py -c patterns.yml -t com.example.app   # Load patterns from config file
+uv run python hooky_pattern_loader.py -j simple_patterns.json -t com.example.app # Load simple JSON patterns (only pattern, regex, description, enabled)
+uv run python hooky_pattern_loader.py -t com.example.app -p "setPassword:a1 18 00 f0 21 ec 45 f9" # Add single pattern via command line
+uv run python hooky_pattern_loader.py -j patterns.json -p "custom:?? ?? ?? ??" -t app # Mix JSON patterns with command line patterns
+uv run python hooky_pattern_loader.py --sample-config > patterns.yml # Generate sample config
 
-# Load simple JSON patterns (only pattern, regex, description, enabled)
-uv run python hooky_pattern_loader.py -j simple_patterns.json -t com.example.app
-
-# Add single pattern via command line
-uv run python hooky_pattern_loader.py -t com.example.app -p "setPassword:a1 18 00 f0 21 ec 45 f9"
-
-# Mix JSON patterns with command line patterns
-uv run python hooky_pattern_loader.py -j patterns.json -p "custom:?? ?? ?? ??" -t app
-
-# Generate sample config
-uv run python hooky_pattern_loader.py --sample-config > patterns.yml
 ```
 
 Some config examples can be found [here](config-examples\sample-json-pattern-examples.json).
