@@ -1,0 +1,15 @@
+{
+  "patterns": {
+    "ssl_bypass": {
+      "pattern": "a1 18 00 f0 21 ec 45 f9",
+      "description": "SSL pinning bypass",
+      "return_value": 0,
+      "return_type": "int"
+    },
+    "auth_check": {
+      "pattern": "ff 43 01 d1 fd 7b 02 a9",
+      "return_value": true,
+      "return_type": "bool"
+    }
+  }
+}   
