@@ -999,24 +999,24 @@ def main():
         epilog="""
 Examples:
   # Load patterns from config file with return value modifications
-  python frida_loader.py -c patterns.yml -t com.example.app
+  python hooky_pattern_loader_enhanced.py -c patterns.yml -t com.example.app
   
   # Load JSON patterns with return value modifications
-  python frida_loader.py -j patterns.json -t com.example.app
+  python hooky_pattern_loader_enhanced.py -j patterns.json -t com.example.app
   
   # Add pattern with return value modification via CLI
-  python frida_loader.py -t com.example.app -p "bypass:a1 18 00 f0:true:bool"
-  python frida_loader.py -t com.example.app -p "check:ff 43 01 d1:-1:int"
-  python frida_loader.py -t com.example.app -p "auth:?? ?? ?? ??:0x1:ptr"
+  python hooky_pattern_loader_enhanced.py -t com.example.app -p "bypass:a1 18 00 f0:true:bool"
+  python hooky_pattern_loader_enhanced.py -t com.example.app -p "check:ff 43 01 d1:-1:int"
+  python hooky_pattern_loader_enhanced.py -t com.example.app -p "auth:?? ?? ?? ??:0x1:ptr"
   
   # Multiple patterns with different return types
-  python frida_loader.py -t app -p "ssl:00 01 ?? ??:0" -p "jail:ff ff:false:bool"
+  python hooky_pattern_loader_enhanced.py -t app -p "ssl:00 01 ?? ??:0" -p "jail:ff ff:false:bool"
   
   # Return value format: value:type (e.g., true:bool, -1:int, 0x0:ptr)
   # Supported types: auto, bool, int, long, float, string, ptr, null
   
   # Generate sample config with return value examples
-  python frida_loader.py --sample-config > advanced_patterns.yml
+  python hooky_pattern_loader_enhanced.py --sample-config > advanced_patterns.yml
         """
     )
     
