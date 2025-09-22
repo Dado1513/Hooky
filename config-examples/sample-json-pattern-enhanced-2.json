@@ -1,0 +1,18 @@
+{
+  "device": "usb",
+  "patterns": {
+    "ssl_pinning": {
+      "pattern": "a1 18 00 f0 21 ec 45 f9 70 0d 00 b0",
+      "regex": "SSLSetSessionOption|SecTrustEvaluate",
+      "description": "SSL certificate validation bypass",
+      "return_value": 0,
+      "return_type": "int"
+    },
+    "license_check": {
+      "pattern": "ff 43 01 d1 fd 7b 02 a9 fd 83 00 91",
+      "description": "Premium license validation",
+      "return_value": true,
+      "return_type": "bool"
+    }
+  }
+}
