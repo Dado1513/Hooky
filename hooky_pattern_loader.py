@@ -28,15 +28,17 @@ class FridaPatternLoader:
         
         # Default configuration
         self.default_config = {
-            'device': 'usb',  # 'usb', 'local', or device ID
-            'spawn_mode': True,  # True to spawn, False to attach
+            'device': 'usb',
+            'spawn_mode': True,
             'auto_resume': True,
             'log_level': 'INFO',
             'hook_timeout': 100,
             'max_matches': 100,
             'enable_stack_trace': False,
             'enable_arg_dump': True,
-            'output_format': 'colored'  # 'colored', 'json', 'plain'
+            'enable_retval_decoding': True,  # New option
+            'max_string_length': 1000,       # New option
+            'output_format': 'colored'
         }
     
     def load_config_file(self, config_path: str) -> Dict:
@@ -342,8 +344,128 @@ class PatternHooker {
         }
     }
 
+    /*defaultOnLeave(retval, context) {
+        this.log('INFO', `[${context.patternName}] Return value: ${retval}`);
+    }*/
     defaultOnLeave(retval, context) {
         this.log('INFO', `[${context.patternName}] Return value: ${retval}`);
+        
+        // Enhanced return value decoding
+        if (retval && !retval.isNull()) {
+            try {
+                // Try to decode as different data types
+                const decodedValues = this.decodeReturnValue(retval);
+                
+                for (const [type, value] of Object.entries(decodedValues)) {
+                    if (value !== null) {
+                        this.log('INFO', `[${context.patternName}] Decoded as ${type}: ${value}`);
+                    }
+                }
+            } catch (e) {
+                this.log('DEBUG', `[${context.patternName}] Error decoding return value: ${e.message}`);
+            }
+        }
+    }
+
+   
+    decodeReturnValue(retval) {
+        const decoded = {};
+        
+        try {
+            // Always show raw pointer
+            decoded.pointer = retval.toString();
+            
+            // Try integer conversion (safest operation)
+            try {
+                const intValue = retval.toInt32();
+                decoded.integer = intValue;
+                
+                if (intValue === 0 || intValue === 1) {
+                    decoded.boolean = intValue === 1;
+                }
+                
+                // Try unsigned integers
+                const uintValue = retval.toUInt32();
+                if (uintValue !== intValue && uintValue > 0) {
+                    decoded.uint32 = uintValue;
+                }
+                
+                // Try uint64 if different from 32-bit values
+                try {
+                    const uint64Value = uint64(retval.toString()).toNumber();
+                    if (uint64Value !== intValue && uint64Value !== uintValue && isFinite(uint64Value)) {
+                        decoded.uint64 = uint64Value;
+                    }
+                } catch (e) {
+                    // Skip uint64 conversion
+                }
+            } catch (e) {
+                // Skip integer conversion
+            }
+            
+            // Try double/float conversion at pointer location (if pointer looks valid)
+            if (!retval.isNull()) {
+                const ptrInt = parseInt(retval.toString(), 16);
+                if (ptrInt > 0x1000 && ptrInt < 0x7fffffffff) {
+                    try {
+                        const doubleValue = Memory.readDouble(retval);
+                        if (isFinite(doubleValue) && !isNaN(doubleValue) && doubleValue !== 0) {
+                            decoded.double = doubleValue;
+                        }
+                        
+                        const floatValue = Memory.readFloat(retval);
+                        if (isFinite(floatValue) && !isNaN(floatValue) && 
+                            Math.abs(floatValue - doubleValue) > 0.0001 && floatValue !== 0) {
+                            decoded.float = floatValue;
+                        }
+                    } catch (e) {
+                        // Skip float/double conversion
+                    }
+                    
+                    // Try C string conversion
+                    try {
+                        // Quick check - read first 4 bytes to see if it looks like text
+                        const firstBytes = Memory.readByteArray(retval, 4);
+                        if (firstBytes) {
+                            const bytes = new Uint8Array(firstBytes);
+                            let printableCount = 0;
+                            
+                            for (let i = 0; i < bytes.length; i++) {
+                                if (bytes[i] === 0) break; // null terminator
+                                if (bytes[i] >= 32 && bytes[i] <= 126) { // printable ASCII
+                                    printableCount++;
+                                }
+                            }
+                            
+                            // If at least 2 printable chars in first 4 bytes, try reading string
+                            if (printableCount >= 2) {
+                                const stringValue = Memory.readUtf8String(retval, 200);
+                                if (stringValue && stringValue.length > 0 && stringValue.trim().length > 0) {
+                                    // Additional validation - avoid control characters
+                                    if (!/[\\x00-\\x08\\x0E-\\x1F\\x7F]/.test(stringValue)) {
+                                        decoded.string = stringValue.length > 100 ? 
+                                            stringValue.substring(0, 100) + '...' : stringValue;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Skip C string conversion
+                    }
+                }
+            }
+            
+            // Try ObjC string conversion if pointer looks reasonable
+            if (typeof ObjC !== 'undefined' && !retval.isNull()) {
+                decoded.nsstring = ObjC.Object(retval).toString();
+
+            }
+            
+        } catch (e) {
+            this.log('DEBUG', `Decode error: ${e.message}`);
+        }
+        
+        return decoded;
     }
 
     hookMethod(address, patternName, patternConfig) {
@@ -497,8 +619,11 @@ initializeHooking();
             'hookTimeout': self.config.get('hook_timeout', 100),
             'maxMatches': self.config.get('max_matches', 100),
             'enableStackTrace': self.config.get('enable_stack_trace', False),
-            'enableArgDump': self.config.get('enable_arg_dump', True)
+            'enableArgDump': self.config.get('enable_arg_dump', True),
+            'enableRetvalDecoding': self.config.get('enable_retval_decoding', True),
+            'maxStringLength': self.config.get('max_string_length', 1000)
         }
+        
         
         # Generate pattern additions
         pattern_additions = []
@@ -744,6 +869,9 @@ Examples:
     parser.add_argument('--timeout', type=int, default=100, help='Hook timeout in milliseconds')
     parser.add_argument('--stack-trace', action='store_true', help='Enable stack traces')
     parser.add_argument('--no-arg-dump', action='store_true', help='Disable argument dumping')
+    parser.add_argument('--no-retval-decode', action='store_true', help='Disable return value decoding')
+    parser.add_argument('--max-string-length', type=int, default=1000, help='Maximum string length to read')
+
     
     args = parser.parse_args()
     
@@ -777,7 +905,10 @@ Examples:
         loader.config['spawn_mode'] = False
     if args.no_resume:
         loader.config['auto_resume'] = False
-    
+    if args.no_retval_decode:
+        loader.config['enable_retval_decoding'] = False
+
+    loader.config['max_string_length'] = args.max_string_length
     loader.config['log_level'] = args.log_level
     loader.config['max_matches'] = args.max_matches
     loader.config['hook_timeout'] = args.timeout
