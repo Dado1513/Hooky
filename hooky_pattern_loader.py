@@ -2,7 +2,7 @@
 """
 Frida Pattern Loader
 Advanced pattern-based hooking tool for penetration testing
-Supports config files, command-line patterns, and interactive mode
+Supports config files, command-line patterns, interactive mode, and return value modification
 """
 
 import argparse
@@ -11,7 +11,7 @@ import sys
 import time
 import yaml
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 import frida
 from frida.core import Session, Device
 from banner import show_banner, Colors
@@ -28,17 +28,15 @@ class FridaPatternLoader:
         
         # Default configuration
         self.default_config = {
-            'device': 'usb',
-            'spawn_mode': True,
+            'device': 'usb',  # 'usb', 'local', or device ID
+            'spawn_mode': True,  # True to spawn, False to attach
             'auto_resume': True,
             'log_level': 'INFO',
             'hook_timeout': 100,
             'max_matches': 100,
             'enable_stack_trace': False,
             'enable_arg_dump': True,
-            'enable_retval_decoding': True,  # New option
-            'max_string_length': 1000,       # New option
-            'output_format': 'colored'
+            'output_format': 'colored'  # 'colored', 'json', 'plain'
         }
     
     def load_config_file(self, config_path: str) -> Dict:
@@ -80,11 +78,13 @@ class FridaPatternLoader:
                         'regex': pattern_data.get('regex'),
                         'enabled': pattern_data.get('enabled', True),
                         'on_enter': pattern_data.get('on_enter'),
-                        'on_leave': pattern_data.get('on_leave')
+                        'on_leave': pattern_data.get('on_leave'),
+                        'return_value': pattern_data.get('return_value'),
+                        'return_type': pattern_data.get('return_type', 'auto')
                     }
     
     def load_patterns_from_json(self, json_path: str):
-        """Load simple patterns from JSON file with only pattern, regex, description, enabled fields"""
+        """Load patterns from JSON file with extended fields including return value modification"""
         json_file = Path(json_path)
         
         if not json_file.exists():
@@ -115,7 +115,7 @@ class FridaPatternLoader:
             else:
                 raise ValueError("JSON must be object or array")
             
-            # Load patterns with only the 4 allowed fields
+            # Load patterns with extended fields
             for pattern_name, pattern_data in patterns_data.items():
                 if isinstance(pattern_data, str):
                     # Simple string pattern
@@ -126,8 +126,11 @@ class FridaPatternLoader:
                         'regex': None
                     }
                 else:
-                    # Filter to only allowed fields
-                    allowed_fields = ['pattern', 'regex', 'description', 'enabled']
+                    # Extended pattern configuration
+                    allowed_fields = [
+                        'pattern', 'regex', 'description', 'enabled',
+                        'return_value', 'return_type', 'on_enter', 'on_leave'
+                    ]
                     filtered_data = {}
                     
                     for field in allowed_fields:
@@ -139,7 +142,11 @@ class FridaPatternLoader:
                         'pattern': filtered_data.get('pattern', ''),
                         'description': filtered_data.get('description', f'Pattern {pattern_name}'),
                         'regex': filtered_data.get('regex'),
-                        'enabled': filtered_data.get('enabled', True)
+                        'enabled': filtered_data.get('enabled', True),
+                        'return_value': filtered_data.get('return_value'),
+                        'return_type': filtered_data.get('return_type', 'auto'),
+                        'on_enter': filtered_data.get('on_enter'),
+                        'on_leave': filtered_data.get('on_leave')
                     }
                     
                     # Warn about ignored fields
@@ -152,14 +159,19 @@ class FridaPatternLoader:
         except Exception as e:
             raise Exception(f"Failed to load JSON pattern file: {e}")
     
-    def add_pattern_from_args(self, name: str, pattern: str, description: str = None):
+    def add_pattern_from_args(self, name: str, pattern: str, description: str = None, 
+                            return_value: Union[str, int, bool] = None, return_type: str = 'auto'):
         """Add pattern from command line arguments"""
         self.patterns[name] = {
             'pattern': pattern,
             'description': description or f'Pattern {name}',
-            'enabled': True
+            'enabled': True,
+            'return_value': return_value,
+            'return_type': return_type
         }
-        print(f"[+] Added pattern: {name} -> {pattern}")
+        
+        return_info = f" (return: {return_value})" if return_value is not None else ""
+        print(f"[+] Added pattern: {name} -> {pattern}{return_info}")
     
     def connect_device(self, device_type: str = 'usb') -> Device:
         """Connect to Frida device"""
@@ -256,12 +268,12 @@ class FridaPatternLoader:
             raise Exception(f"Failed to start session with '{target}': {e}")
     
     def generate_frida_script(self) -> str:
-        """Generate the complete Frida script with patterns"""
+        """Generate the complete Frida script with patterns and return value modification"""
         
-        # Base modular hooker script (embedded)
+        # Enhanced base modular hooker script with return value modification
         base_script = """
 /**
- * Modular Frida Script for Pattern-Based Method Hooking
+ * Modular Frida Script for Pattern-Based Method Hooking with Return Value Modification
  * Auto-generated by FridaPatternLoader
  */
 
@@ -294,9 +306,94 @@ class PatternHooker {
             description: options.description || name,
             onEnter: options.onEnter || this.defaultOnEnter.bind(this),
             onLeave: options.onLeave || this.defaultOnLeave.bind(this),
-            enabled: options.enabled !== false
+            enabled: options.enabled !== false,
+            returnValue: options.returnValue,
+            returnType: options.returnType || 'auto'
         });
         this.log('DEBUG', `Added pattern: ${name} - ${cleanPattern}`);
+        
+        if (options.returnValue !== undefined) {
+            this.log('INFO', `[${name}] Will modify return value to: ${options.returnValue} (type: ${options.returnType})`);
+        }
+    }
+
+    convertReturnValue(value, type) {
+        if (value === null || value === undefined) {
+            return null;
+        }
+
+        try {
+            switch (type.toLowerCase()) {
+                case 'bool':
+                case 'boolean':
+                    if (typeof value === 'boolean') return value;
+                    if (typeof value === 'string') {
+                        return value.toLowerCase() === 'true' || value === '1';
+                    }
+                    return Boolean(value);
+                    
+                case 'int':
+                case 'integer':
+                case 'int32':
+                    return parseInt(value);
+                    
+                case 'long':
+                case 'int64':
+                    return parseInt(value);
+                    
+                case 'float':
+                case 'double':
+                    return parseFloat(value);
+                    
+                case 'string':
+                case 'str':
+                    return String(value);
+                    
+                case 'ptr':
+                case 'pointer':
+                    if (typeof value === 'string') {
+                        return ptr(value);
+                    }
+                    return value;
+                    
+                case 'null':
+                    return ptr(0);
+                    
+                case 'auto':
+                default:
+                    // Auto-detect type
+                    if (typeof value === 'boolean') return value;
+                    if (typeof value === 'number') return value;
+                    if (typeof value === 'string') {
+                        // Try to parse as number
+                        const num = parseFloat(value);
+                        if (!isNaN(num) && isFinite(num)) {
+                            return Number.isInteger(num) ? parseInt(value) : num;
+                        }
+                        
+                        // Check for boolean strings
+                        const lower = value.toLowerCase();
+                        if (lower === 'true' || lower === 'false') {
+                            return lower === 'true';
+                        }
+                        
+                        // Check for pointer format
+                        if (value.startsWith('0x') || value.match(/^[0-9a-fA-F]+$/)) {
+                            try {
+                                return ptr(value);
+                            } catch (e) {
+                                return value;
+                            }
+                        }
+                        
+                        return value;
+                    }
+                    return value;
+            }
+        } catch (e) {
+            this.log('WARN', `Failed to convert return value '${value}' to type '${type}': ${e.message}`);
+            return value;
+        }
     }
 
     defaultOnEnter(args, context) {
@@ -344,128 +441,19 @@ class PatternHooker {
         }
     }
 
-    /*defaultOnLeave(retval, context) {
-        this.log('INFO', `[${context.patternName}] Return value: ${retval}`);
-    }*/
     defaultOnLeave(retval, context) {
-        this.log('INFO', `[${context.patternName}] Return value: ${retval}`);
+        const patternConfig = this.patterns.get(context.patternName);
         
-        // Enhanced return value decoding
-        if (retval && !retval.isNull()) {
-            try {
-                // Try to decode as different data types
-                const decodedValues = this.decodeReturnValue(retval);
-                
-                for (const [type, value] of Object.entries(decodedValues)) {
-                    if (value !== null) {
-                        this.log('INFO', `[${context.patternName}] Decoded as ${type}: ${value}`);
-                    }
-                }
-            } catch (e) {
-                this.log('DEBUG', `[${context.patternName}] Error decoding return value: ${e.message}`);
-            }
+        // Log original return value
+        this.log('INFO', `[${context.patternName}] Original return value: ${retval}`);
+        
+        // Check if we should modify the return value
+        if (patternConfig && patternConfig.returnValue !== undefined && patternConfig.returnValue !== null) {
+            const newRetval = this.convertReturnValue(patternConfig.returnValue, patternConfig.returnType);
+            retval.replace(newRetval);
+            
+            this.log('INFO', `[${context.patternName}] *** MODIFIED return value to: ${newRetval} (type: ${patternConfig.returnType}) ***`);
         }
-    }
-
-   
-    decodeReturnValue(retval) {
-        const decoded = {};
-        
-        try {
-            // Always show raw pointer
-            decoded.pointer = retval.toString();
-            
-            // Try integer conversion (safest operation)
-            try {
-                const intValue = retval.toInt32();
-                decoded.integer = intValue;
-                
-                if (intValue === 0 || intValue === 1) {
-                    decoded.boolean = intValue === 1;
-                }
-                
-                // Try unsigned integers
-                const uintValue = retval.toUInt32();
-                if (uintValue !== intValue && uintValue > 0) {
-                    decoded.uint32 = uintValue;
-                }
-                
-                // Try uint64 if different from 32-bit values
-                try {
-                    const uint64Value = uint64(retval.toString()).toNumber();
-                    if (uint64Value !== intValue && uint64Value !== uintValue && isFinite(uint64Value)) {
-                        decoded.uint64 = uint64Value;
-                    }
-                } catch (e) {
-                    // Skip uint64 conversion
-                }
-            } catch (e) {
-                // Skip integer conversion
-            }
-            
-            // Try double/float conversion at pointer location (if pointer looks valid)
-            if (!retval.isNull()) {
-                const ptrInt = parseInt(retval.toString(), 16);
-                if (ptrInt > 0x1000 && ptrInt < 0x7fffffffff) {
-                    try {
-                        const doubleValue = Memory.readDouble(retval);
-                        if (isFinite(doubleValue) && !isNaN(doubleValue) && doubleValue !== 0) {
-                            decoded.double = doubleValue;
-                        }
-                        
-                        const floatValue = Memory.readFloat(retval);
-                        if (isFinite(floatValue) && !isNaN(floatValue) && 
-                            Math.abs(floatValue - doubleValue) > 0.0001 && floatValue !== 0) {
-                            decoded.float = floatValue;
-                        }
-                    } catch (e) {
-                        // Skip float/double conversion
-                    }
-                    
-                    // Try C string conversion
-                    try {
-                        // Quick check - read first 4 bytes to see if it looks like text
-                        const firstBytes = Memory.readByteArray(retval, 4);
-                        if (firstBytes) {
-                            const bytes = new Uint8Array(firstBytes);
-                            let printableCount = 0;
-                            
-                            for (let i = 0; i < bytes.length; i++) {
-                                if (bytes[i] === 0) break; // null terminator
-                                if (bytes[i] >= 32 && bytes[i] <= 126) { // printable ASCII
-                                    printableCount++;
-                                }
-                            }
-                            
-                            // If at least 2 printable chars in first 4 bytes, try reading string
-                            if (printableCount >= 2) {
-                                const stringValue = Memory.readUtf8String(retval, 200);
-                                if (stringValue && stringValue.length > 0 && stringValue.trim().length > 0) {
-                                    // Additional validation - avoid control characters
-                                    if (!/[\\x00-\\x08\\x0E-\\x1F\\x7F]/.test(stringValue)) {
-                                        decoded.string = stringValue.length > 100 ? 
-                                            stringValue.substring(0, 100) + '...' : stringValue;
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        // Skip C string conversion
-                    }
-                }
-            }
-            
-            // Try ObjC string conversion if pointer looks reasonable
-            if (typeof ObjC !== 'undefined' && !retval.isNull()) {
-                decoded.nsstring = ObjC.Object(retval).toString();
-
-            }
-            
-        } catch (e) {
-            this.log('DEBUG', `Decode error: ${e.message}`);
-        }
-        
-        return decoded;
     }
 
     hookMethod(address, patternName, patternConfig) {
@@ -504,7 +492,12 @@ class PatternHooker {
                 address: address.toString()
             });
 
-            this.log('INFO', `[${patternName}] Hooked method at ${address}`);
+            let hookInfo = `[${patternName}] Hooked method at ${address}`;
+            if (patternConfig.returnValue !== undefined) {
+                hookInfo += ` (will return: ${patternConfig.returnValue})`;
+            }
+            this.log('INFO', hookInfo);
+            
         } catch (e) {
             this.log('ERROR', `Failed to hook ${address}: ${e.message}`);
         }
@@ -581,8 +574,35 @@ class PatternHooker {
             totalPatterns: this.patterns.size,
             enabledPatterns: Array.from(this.patterns.values()).filter(p => p.enabled).length,
             activeHooks: this.hooks.size,
+            patternsWithReturnMod: Array.from(this.patterns.values()).filter(p => p.returnValue !== undefined).length,
             patterns: Object.fromEntries(this.patterns)
         };
+    }
+
+    // Interactive functions for return value modification
+    setReturnValue(patternName, value, type = 'auto') {
+        const pattern = this.patterns.get(patternName);
+        if (!pattern) {
+            this.log('ERROR', `Pattern '${patternName}' not found`);
+            return false;
+        }
+        
+        pattern.returnValue = value;
+        pattern.returnType = type;
+        this.log('INFO', `Set return value for '${patternName}' to: ${value} (type: ${type})`);
+        return true;
+    }
+
+    clearReturnValue(patternName) {
+        const pattern = this.patterns.get(patternName);
+        if (!pattern) {
+            this.log('ERROR', `Pattern '${patternName}' not found`);
+            return false;
+        }
+        
+        pattern.returnValue = undefined;
+        this.log('INFO', `Cleared return value modification for '${patternName}'`);
+        return true;
     }
 }
 
@@ -608,6 +628,8 @@ globalThis.addPattern = hooker.addPattern.bind(hooker);
 globalThis.searchPatterns = hooker.searchPatterns.bind(hooker);
 globalThis.unhookAll = hooker.unhookAll.bind(hooker);
 globalThis.getStats = hooker.getStats.bind(hooker);
+globalThis.setReturnValue = hooker.setReturnValue.bind(hooker);
+globalThis.clearReturnValue = hooker.clearReturnValue.bind(hooker);
 
 // Start hooking
 initializeHooking();
@@ -619,11 +641,8 @@ initializeHooking();
             'hookTimeout': self.config.get('hook_timeout', 100),
             'maxMatches': self.config.get('max_matches', 100),
             'enableStackTrace': self.config.get('enable_stack_trace', False),
-            'enableArgDump': self.config.get('enable_arg_dump', True),
-            'enableRetvalDecoding': self.config.get('enable_retval_decoding', True),
-            'maxStringLength': self.config.get('max_string_length', 1000)
+            'enableArgDump': self.config.get('enable_arg_dump', True)
         }
-        
         
         # Generate pattern additions
         pattern_additions = []
@@ -644,6 +663,11 @@ initializeHooking();
             
             if pattern_data.get('on_leave'):
                 options['onLeave'] = pattern_data['on_leave']
+            
+            # Add return value modification options
+            if pattern_data.get('return_value') is not None:
+                options['returnValue'] = pattern_data['return_value']
+                options['returnType'] = pattern_data.get('return_type', 'auto')
             
             pattern_line = f"hooker.addPattern('{name}', '{pattern_data['pattern']}', {json.dumps(options)});"
             pattern_additions.append(pattern_line)
@@ -690,27 +714,37 @@ initializeHooking();
             raise Exception(f"Failed to load script: {e}")
     
     def run_interactive(self):
-        """Run in interactive mode"""
+        """Run in interactive mode with return value modification commands"""
         print("\n[+] Interactive mode - Available commands:")
-        print("  stats       - Show hooking statistics")
-        print("  patterns    - List loaded patterns")
-        print("  search      - Re-run pattern search")
-        print("  unhook      - Remove all hooks")
-        print("  processes   - List device processes")
-        print("  modules     - List loaded modules")
-        print("  pid         - Show current PID")
-        print("  help        - Show this help")
-        print("  quit        - Exit")
+        print("  stats        - Show hooking statistics")
+        print("  patterns     - List loaded patterns")
+        print("  search       - Re-run pattern search")
+        print("  unhook       - Remove all hooks")
+        print("  setret <pattern> <value> [type] - Set return value for pattern")
+        print("  clearret <pattern>              - Clear return value modification")
+        print("  processes    - List device processes")
+        print("  modules      - List loaded modules")
+        print("  pid          - Show current PID")
+        print("  help         - Show this help")
+        print("  quit         - Exit")
+        print()
+        print("Return value types: auto, bool, int, long, float, string, ptr, null")
         print()
         
         try:
             while True:
                 try:
-                    cmd = input("frida-patterns> ").strip().lower()
+                    cmd = input("frida-patterns> ").strip()
+                    parts = cmd.split()
                     
-                    if cmd in ['quit', 'exit', 'q']:
+                    if not parts:
+                        continue
+                        
+                    cmd_name = parts[0].lower()
+                    
+                    if cmd_name in ['quit', 'exit', 'q']:
                         break
-                    elif cmd == 'stats':
+                    elif cmd_name == 'stats':
                         try:
                             result = self.script.exports_sync.get_stats()
                             print("Hook Statistics:", json.dumps(result, indent=2))
@@ -718,21 +752,24 @@ initializeHooking();
                             print("[!] Stats function not available. Script may not be fully loaded.")
                         except Exception as e:
                             print(f"[!] Error getting stats: {e}")
-                    elif cmd == 'patterns':
+                    elif cmd_name == 'patterns':
                         print("\nLoaded Patterns:")
                         for name, pattern in self.patterns.items():
                             enabled = "✓" if pattern.get('enabled', True) else "✗"
                             regex_info = f" (regex: {pattern['regex']})" if pattern.get('regex') else ""
-                            print(f"  {enabled} {name}: {pattern['pattern'][:50]}...{regex_info}")
+                            ret_info = ""
+                            if pattern.get('return_value') is not None:
+                                ret_info = f" [RETURN: {pattern['return_value']} ({pattern.get('return_type', 'auto')})]"
+                            print(f"  {enabled} {name}: {pattern['pattern'][:50]}...{regex_info}{ret_info}")
                             print(f"    Description: {pattern.get('description', 'N/A')}")
-                    elif cmd == 'search':
+                    elif cmd_name == 'search':
                         try:
                             self.script.exports_sync.search_patterns()
                         except AttributeError:
                             print("[!] Search function not available.")
                         except Exception as e:
                             print(f"[!] Error running search: {e}")
-                    elif cmd == 'unhook':
+                    elif cmd_name == 'unhook':
                         try:
                             self.script.exports_sync.unhook_all()
                             print("[+] All hooks removed")
@@ -740,7 +777,68 @@ initializeHooking();
                             print("[!] Unhook function not available.")
                         except Exception as e:
                             print(f"[!] Error unhooking: {e}")
-                    elif cmd == 'processes':
+                    elif cmd_name == 'setret':
+                        if len(parts) < 3:
+                            print("[!] Usage: setret <pattern> <value> [type]")
+                            continue
+                        
+                        pattern_name = parts[1]
+                        value = parts[2]
+                        ret_type = parts[3] if len(parts) > 3 else 'auto'
+                        
+                        # Convert value to appropriate Python type
+                        if ret_type.lower() in ['bool', 'boolean']:
+                            value = value.lower() in ['true', '1', 'yes']
+                        elif ret_type.lower() in ['int', 'integer', 'int32', 'long', 'int64']:
+                            try:
+                                value = int(value)
+                            except ValueError:
+                                print(f"[!] Invalid integer value: {value}")
+                                continue
+                        elif ret_type.lower() in ['float', 'double']:
+                            try:
+                                value = float(value)
+                            except ValueError:
+                                print(f"[!] Invalid float value: {value}")
+                                continue
+                        
+                        # Update local pattern configuration
+                        if pattern_name in self.patterns:
+                            self.patterns[pattern_name]['return_value'] = value
+                            self.patterns[pattern_name]['return_type'] = ret_type
+                            
+                            # Update running script if available
+                            try:
+                                self.script.exports_sync.set_return_value(pattern_name, value, ret_type)
+                                print(f"[+] Set return value for '{pattern_name}' to: {value} (type: {ret_type})")
+                            except AttributeError:
+                                print("[!] setReturnValue function not available in script.")
+                            except Exception as e:
+                                print(f"[!] Error setting return value: {e}")
+                        else:
+                            print(f"[!] Pattern '{pattern_name}' not found")
+                    elif cmd_name == 'clearret':
+                        if len(parts) < 2:
+                            print("[!] Usage: clearret <pattern>")
+                            continue
+                        
+                        pattern_name = parts[1]
+                        
+                        # Update local pattern configuration
+                        if pattern_name in self.patterns:
+                            self.patterns[pattern_name]['return_value'] = None
+                            
+                            # Update running script if available
+                            try:
+                                self.script.exports_sync.clear_return_value(pattern_name)
+                                print(f"[+] Cleared return value modification for '{pattern_name}'")
+                            except AttributeError:
+                                print("[!] clearReturnValue function not available in script.")
+                            except Exception as e:
+                                print(f"[!] Error clearing return value: {e}")
+                        else:
+                            print(f"[!] Pattern '{pattern_name}' not found")
+                    elif cmd_name == 'processes':
                         try:
                             processes = self.device.enumerate_processes()
                             print("\nRunning Processes:")
@@ -750,7 +848,7 @@ initializeHooking();
                                 print(f"  ... and {len(processes) - 20} more")
                         except Exception as e:
                             print(f"[!] Error listing processes: {e}")
-                    elif cmd == 'modules':
+                    elif cmd_name == 'modules':
                         try:
                             if self.session:
                                 modules = self.session.enumerate_modules()
@@ -763,13 +861,17 @@ initializeHooking();
                                 print("[!] No active session")
                         except Exception as e:
                             print(f"[!] Error listing modules: {e}")
-                    elif cmd == 'pid':
+                    elif cmd_name == 'pid':
                         print(f"Current PID: {self.current_pid}")
-                    elif cmd == 'help':
+                    elif cmd_name == 'help':
                         print("Available commands:")
-                        print("  stats, patterns, search, unhook, processes, modules, pid, help, quit")
+                        print("  stats, patterns, search, unhook")
+                        print("  setret <pattern> <value> [type] - Set return value")
+                        print("  clearret <pattern> - Clear return value modification")
+                        print("  processes, modules, pid, help, quit")
+                        print("\nReturn value types: auto, bool, int, long, float, string, ptr, null")
                     elif cmd:
-                        print(f"Unknown command: {cmd}. Type 'help' for available commands.")
+                        print(f"Unknown command: {cmd_name}. Type 'help' for available commands.")
                         
                 except KeyboardInterrupt:
                     print("\nUse 'quit' to exit")
@@ -798,7 +900,7 @@ initializeHooking();
         print("[+] Cleanup complete")
 
 def create_sample_config():
-    """Create a sample configuration file"""
+    """Create a sample configuration file with return value modification examples"""
     sample_config = {
         'device': 'usb',
         'spawn_mode': True,
@@ -812,54 +914,120 @@ def create_sample_config():
             'setPasswordProperty': {
                 'pattern': 'a1 18 00 f0 21 ec 45 f9 70 0d 00 b0 10 5a 41 f9 00 02 1f d6',
                 'description': 'Password property setter with hardcoded value',
-                'enabled': True
+                'enabled': True,
+                'return_value': True,
+                'return_type': 'bool'
             },
             'ssl_pinning_check': {
                 'pattern': '?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? 00 01 ?? ??',
                 'regex': 'SSLSetSessionOption|SSLHandshake|SecTrustEvaluate',
-                'description': 'SSL/TLS security validation methods',
-                'enabled': True
+                'description': 'SSL/TLS security validation methods - bypass by returning success',
+                'enabled': True,
+                'return_value': 0,
+                'return_type': 'int'
             },
             'jailbreak_detection': {
                 'pattern': '?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ??',
                 'regex': 'stat|access|fopen.*cydia|substrate',
-                'description': 'Jailbreak detection patterns',
-                'enabled': True
+                'description': 'Jailbreak detection patterns - return failure to hide jailbreak',
+                'enabled': True,
+                'return_value': -1,
+                'return_type': 'int'
+            },
+            'license_check': {
+                'pattern': 'ff 43 01 d1 fd 7b 02 a9 fd 83 00 91 f3 53 01 a9',
+                'description': 'License validation - always return valid',
+                'enabled': True,
+                'return_value': True,
+                'return_type': 'bool'
+            },
+            'biometric_auth': {
+                'pattern': '?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ??',
+                'regex': 'LAContext|evaluatePolicy|canEvaluatePolicy',
+                'description': 'Biometric authentication bypass',
+                'enabled': True,
+                'return_value': True,
+                'return_type': 'bool'
             }
         }
     }
     
     return sample_config
 
+def parse_return_value_arg(arg_str: str) -> tuple:
+    """Parse return value argument in format 'value:type' or just 'value'"""
+    if ':' in arg_str:
+        value_str, ret_type = arg_str.rsplit(':', 1)
+    else:
+        value_str, ret_type = arg_str, 'auto'
+    
+    # Auto-convert common values
+    if ret_type.lower() == 'auto':
+        if value_str.lower() in ['true', 'false']:
+            return value_str.lower() == 'true', 'bool'
+        elif value_str.lower() == 'null':
+            return None, 'null'
+        elif value_str.isdigit() or (value_str.startswith('-') and value_str[1:].isdigit()):
+            return int(value_str), 'int'
+        elif '.' in value_str:
+            try:
+                return float(value_str), 'float'
+            except ValueError:
+                return value_str, 'string'
+        elif value_str.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in value_str):
+            return value_str, 'ptr'
+        else:
+            return value_str, 'string'
+    else:
+        # Explicit type conversion
+        if ret_type.lower() in ['bool', 'boolean']:
+            return value_str.lower() in ['true', '1', 'yes'], ret_type
+        elif ret_type.lower() in ['int', 'integer', 'int32', 'long', 'int64']:
+            return int(value_str), ret_type
+        elif ret_type.lower() in ['float', 'double']:
+            return float(value_str), ret_type
+        elif ret_type.lower() == 'null':
+            return None, ret_type
+        else:
+            return value_str, ret_type
+
 def main():
     show_banner()
     parser = argparse.ArgumentParser(
-        description='Frida Pattern Loader - Advanced pattern-based hooking for penetration testing',
+        description='Frida Pattern Loader - Advanced pattern-based hooking with return value modification',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Load patterns from config file
-  python frida_loader.py -c patterns.yml -t com.example.app
+  # Load patterns from config file with return value modifications
+  python hooky_pattern_loader_enhanced.py -c patterns.yml -t com.example.app
   
-  # Load simple JSON patterns (only pattern, regex, description, enabled)
-  python frida_loader.py -j simple_patterns.json -t com.example.app
+  # Load JSON patterns with return value modifications
+  python hooky_pattern_loader_enhanced.py -j patterns.json -t com.example.app
   
-  # Add single pattern via command line
-  python frida_loader.py -t com.example.app -p "setPassword:a1 18 00 f0 21 ec 45 f9"
+  # Add pattern with return value modification via CLI
+  python hooky_pattern_loader_enhanced.py -t com.example.app -p "bypass:a1 18 00 f0:true:bool"
+  python hooky_pattern_loader_enhanced.py -t com.example.app -p "check:ff 43 01 d1:-1:int"
+  python hooky_pattern_loader_enhanced.py -t com.example.app -p "auth:?? ?? ?? ??:0x1:ptr"
   
-  # Mix JSON patterns with command line patterns
-  python frida_loader.py -j patterns.json -p "custom:?? ?? ?? ??" -t app
+  # Multiple patterns with different return types
+  python hooky_pattern_loader_enhanced.py -t app -p "ssl:00 01 ?? ??:0" -p "jail:ff ff:false:bool"
   
-  # Generate sample config
-  python frida_loader.py --sample-config > patterns.yml
+  # Return value format: value:type (e.g., true:bool, -1:int, 0x0:ptr)
+  # Supported types: auto, bool, int, long, float, string, ptr, null
+  
+  # Generate sample config with return value examples
+  python hooky_pattern_loader_enhanced.py --sample-config > advanced_patterns.yml
         """
     )
     
     parser.add_argument('-c', '--config', type=str, help='Configuration file (YAML/JSON)')
-    parser.add_argument('-j', '--json-patterns', type=str, help='Simple JSON pattern file (pattern, regex, description, enabled only)')
+    parser.add_argument('-j', '--json-patterns', type=str, help='JSON pattern file with return value modifications')
     parser.add_argument('-t', '--target', type=str, help='Target application (bundle ID or process name)')
     parser.add_argument('-d', '--device', type=str, default='usb', help='Device type: usb, local, or device ID')
-    parser.add_argument('-p', '--pattern', action='append', help='Pattern in format "name:hex_pattern"')
+    parser.add_argument('-p', '--pattern', action='append', 
+                       help='Pattern in format "name:hex_pattern[:return_value[:return_type]]"')
+    parser.add_argument('-r', '--return-value', action='append', nargs=2, metavar=('PATTERN', 'VALUE:TYPE'),
+                       help='Set return value for existing pattern (e.g., -r ssl_check "true:bool")')
     parser.add_argument('--attach', action='store_true', help='Attach mode (default: spawn)')
     parser.add_argument('--no-resume', action='store_true', help='Don\'t auto-resume spawned process')
     parser.add_argument('-i', '--interactive', action='store_true', help='Run in interactive mode')
@@ -869,9 +1037,6 @@ Examples:
     parser.add_argument('--timeout', type=int, default=100, help='Hook timeout in milliseconds')
     parser.add_argument('--stack-trace', action='store_true', help='Enable stack traces')
     parser.add_argument('--no-arg-dump', action='store_true', help='Disable argument dumping')
-    parser.add_argument('--no-retval-decode', action='store_true', help='Disable return value decoding')
-    parser.add_argument('--max-string-length', type=int, default=1000, help='Maximum string length to read')
-
     
     args = parser.parse_args()
     
@@ -894,7 +1059,7 @@ Examples:
     else:
         loader.config = loader.default_config.copy()
     
-    # Load simple JSON patterns
+    # Load JSON patterns (now supports return value modification)
     if args.json_patterns:
         loader.load_patterns_from_json(args.json_patterns)
     
@@ -905,27 +1070,46 @@ Examples:
         loader.config['spawn_mode'] = False
     if args.no_resume:
         loader.config['auto_resume'] = False
-    if args.no_retval_decode:
-        loader.config['enable_retval_decoding'] = False
-
-    loader.config['max_string_length'] = args.max_string_length
+    
     loader.config['log_level'] = args.log_level
     loader.config['max_matches'] = args.max_matches
     loader.config['hook_timeout'] = args.timeout
     loader.config['enable_stack_trace'] = args.stack_trace
     loader.config['enable_arg_dump'] = not args.no_arg_dump
     
-    # Add patterns from command line
+    # Add patterns from command line with return value support
     if args.pattern:
         for pattern_arg in args.pattern:
-            if ':' not in pattern_arg:
-                parser.error(f"Invalid pattern format: {pattern_arg}. Use 'name:hex_pattern'")
+            parts = pattern_arg.split(':')
             
-            name, pattern = pattern_arg.split(':', 1)
-            loader.add_pattern_from_args(name, pattern)
+            if len(parts) < 2:
+                parser.error(f"Invalid pattern format: {pattern_arg}. Use 'name:hex_pattern[:return_value[:return_type]]'")
+            
+            name = parts[0]
+            pattern = parts[1]
+            
+            return_value = None
+            return_type = 'auto'
+            
+            if len(parts) >= 3:
+                return_value_str = ':'.join(parts[2:])  # Handle values with colons
+                return_value, return_type = parse_return_value_arg(return_value_str)
+            
+            loader.add_pattern_from_args(name, pattern, return_value=return_value, return_type=return_type)
+    
+    # Set return values for existing patterns
+    if args.return_value:
+        for pattern_name, value_type_str in args.return_value:
+            if pattern_name in loader.patterns:
+                return_value, return_type = parse_return_value_arg(value_type_str)
+                loader.patterns[pattern_name]['return_value'] = return_value
+                loader.patterns[pattern_name]['return_type'] = return_type
+                print(f"[+] Set return value for '{pattern_name}': {return_value} ({return_type})")
+            else:
+                print(f"[!] Pattern '{pattern_name}' not found for return value setting")
     
     if not loader.patterns:
-        print("[!] No patterns loaded. Use -c config_file or -p name:pattern")
+        print("[!] No patterns loaded. Use -c config_file, -j json_file, or -p name:pattern")
         return
     
     try:
@@ -937,7 +1121,7 @@ Examples:
         loader.start_session(args.target, loader.config['spawn_mode'])
         
         # Load and run script
-        print("[+] Loading Frida script with patterns...")
+        print("[+] Loading Frida script with patterns and return value modifications...")
         loader.load_and_run_script()
 
         # sleep and resume
@@ -946,7 +1130,15 @@ Examples:
         
         print(f"[+] Loaded {len(loader.patterns)} patterns:")
         for name, pattern in loader.patterns.items():
-            print(f"  • {name}: {pattern['description']}")
+            ret_info = ""
+            if pattern.get('return_value') is not None:
+                ret_info = f" [RETURNS: {pattern['return_value']} ({pattern.get('return_type', 'auto')})]"
+            print(f"  • {name}: {pattern['description']}{ret_info}")
+        
+        # Count patterns with return value modifications
+        return_mod_count = len([p for p in loader.patterns.values() if p.get('return_value') is not None])
+        if return_mod_count > 0:
+            print(f"\n[+] {return_mod_count} patterns configured with return value modifications")
         
         if args.interactive:
             loader.run_interactive()
